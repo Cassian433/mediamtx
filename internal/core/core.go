@@ -1365,7 +1365,9 @@ func (p *Core) apiConfigSnapshot() *conf.Conf {
 
 func (p *Core) doAPIConfigGlobalPatch(in conf.OptionalGlobal) (*conf.Conf, error) {
 	newConf := p.conf.Load().Clone()
-	newConf.PatchGlobal(&in)
+	if err := newConf.PatchGlobal(&in); err != nil {
+		return nil, err
+	}
 
 	if err := newConf.Validate(nil); err != nil {
 		return nil, err
