@@ -20,6 +20,7 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/bluenviron/mediamtx/internal/api"
 	"github.com/bluenviron/mediamtx/internal/auth"
@@ -206,6 +207,8 @@ type Core struct {
 	ctxCancel       func()
 	confPath        string
 	conf            atomic.Pointer[conf.Conf]
+	internalUsers   atomic.Pointer[internalUserSnapshot]
+	internalUserIDs []uuid.UUID
 	supportsIPv6    bool
 	logger          *logger.Logger
 	externalCmdPool *externalcmd.Pool
@@ -233,6 +236,7 @@ type Core struct {
 	chAPIConfigPathPatch         chan configPathPatchReq
 	chAPIConfigPathReplace       chan configPathReplaceReq
 	chAPIConfigPathDelete        chan configPathDeleteReq
+	chAPIConfigInternalUser      chan configInternalUserReq
 
 	// out
 	done chan struct{}
@@ -323,6 +327,7 @@ func New(args []string) (*Core, bool) {
 		chAPIConfigPathPatch:         make(chan configPathPatchReq),
 		chAPIConfigPathReplace:       make(chan configPathReplaceReq),
 		chAPIConfigPathDelete:        make(chan configPathDeleteReq),
+		chAPIConfigInternalUser:      make(chan configInternalUserReq),
 		done:                         make(chan struct{}),
 	}
 
@@ -343,6 +348,8 @@ func New(args []string) (*Core, bool) {
 
 	p.confPath = confPath
 	p.conf.Store(loadedConf)
+	p.internalUserIDs = newInternalUserIDs(len(loadedConf.AuthInternalUsers))
+	p.internalUsers.Store(&internalUserSnapshot{conf: loadedConf, ids: p.internalUserIDs})
 
 	err = p.createResources(true)
 	if err != nil {
@@ -480,6 +487,16 @@ outer:
 					p.Log(logger.Error, "%s", err)
 					break outer
 				}
+			}
+
+		case req := <-p.chAPIConfigInternalUser:
+			newConf, ids, id, err := p.doAPIConfigInternalUser(req)
+			if err == nil {
+				err = p.reloadConfWithInternalUserIDs(newConf, ids)
+			}
+			req.res <- configInternalUserRes{id: id, err: err}
+			if err != nil && p.ctx.Err() != nil {
+				break outer
 			}
 
 		case <-interrupt:
@@ -1340,11 +1357,21 @@ func (p *Core) closeResources(newConf *conf.Conf) {
 }
 
 func (p *Core) reloadConf(newConf *conf.Conf) error {
+	ids := p.internalUserIDs
+	if !reflect.DeepEqual(p.conf.Load().AuthInternalUsers, newConf.AuthInternalUsers) {
+		ids = newInternalUserIDs(len(newConf.AuthInternalUsers))
+	}
+	return p.reloadConfWithInternalUserIDs(newConf, ids)
+}
+
+func (p *Core) reloadConfWithInternalUserIDs(newConf *conf.Conf, ids []uuid.UUID) error {
 	oldLogger := p.logger
 
 	p.closeResources(newConf)
 
 	p.conf.Store(newConf)
+	p.internalUserIDs = ids
+	p.internalUsers.Store(&internalUserSnapshot{conf: newConf, ids: ids})
 
 	err := p.createResources(false)
 	if err != nil {

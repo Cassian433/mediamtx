@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/bluenviron/mediamtx/internal/auth"
 	"github.com/bluenviron/mediamtx/internal/conf"
@@ -61,6 +62,11 @@ type apiParent interface {
 	APIConfigPathsPatch(string, conf.OptionalPath) error
 	APIConfigPathsReplace(string, conf.OptionalPath) error
 	APIConfigPathsDelete(string) error
+	APIConfigInternalUsersSnapshot() []defs.APIInternalUser
+	APIConfigInternalUsersAdd(conf.AuthInternalUser) (uuid.UUID, error)
+	APIConfigInternalUsersPatch(uuid.UUID, conf.OptionalAuthInternalUser) error
+	APIConfigInternalUsersReplace(uuid.UUID, conf.AuthInternalUser) error
+	APIConfigInternalUsersDelete(uuid.UUID) error
 }
 
 // API is an API server.
@@ -113,6 +119,13 @@ func (a *API) Initialize() error {
 	// deprecated
 	group.GET("/config/pathdefaults/get", a.onConfigPathDefaultsGet)
 	group.PATCH("/config/pathdefaults/patch", a.onConfigPathDefaultsPatch)
+
+	group.GET("/config/internal-users/list", a.onConfigInternalUsersList)
+	group.GET("/config/internal-users/get/:id", a.onConfigInternalUsersGet)
+	group.POST("/config/internal-users/add", a.onConfigInternalUsersAdd)
+	group.PATCH("/config/internal-users/patch/:id", a.onConfigInternalUsersPatch)
+	group.POST("/config/internal-users/replace/:id", a.onConfigInternalUsersReplace)
+	group.DELETE("/config/internal-users/delete/:id", a.onConfigInternalUsersDelete)
 
 	group.GET("/config/paths/list", a.onConfigPathsList)
 	group.GET("/config/paths/get/*name", a.onConfigPathsGet)

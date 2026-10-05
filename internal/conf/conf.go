@@ -25,6 +25,9 @@ import (
 // ErrPathNotFound is returned when a path is not found.
 var ErrPathNotFound = errors.New("path not found")
 
+// ErrAuthInternalUserNotFound is returned when an internal user is not found.
+var ErrAuthInternalUserNotFound = errors.New("internal user not found")
+
 func sortedKeys(paths map[string]*OptionalPath) []string {
 	ret := make([]string, len(paths))
 	i := 0
